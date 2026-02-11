@@ -44,7 +44,7 @@ jobs:
             opam-${{matrix.ocaml_version}}-
 
       - name: Set up OCaml
-        uses: avsm/setup-ocaml@v1
+        uses: avsm/setup-ocaml@v3
         with:
           ocaml-version: ${{matrix.ocaml_version}}
 
