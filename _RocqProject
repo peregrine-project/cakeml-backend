@@ -14,6 +14,7 @@ theories/CakeML/FullAst.v
 theories/CakeML/Serialize.v
 theories/CakeML/Deserialize.v
 theories/Backend/Compile.v
+theories/Backend/CompileCorrect.v
 theories/Backend/FFI.v
 theories/Backend/Pipeline.v
 theories/Backend/Serialize.v
