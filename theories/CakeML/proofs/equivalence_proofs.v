@@ -65,7 +65,7 @@ Proof.
 			* unfold return_def in H1. inversion H1. apply e_step_Fun.
 			* unfold push in H1. inversion H1. constructor.
 			* unfold push in H1; inversion H1. constructor.
-			* destruct (ALL_DISTINCT conN (fun x y : conN => negb (x =? y)%string) (map (fun '(x, _, _) => x) f)) eqn:?; try easy.
+			* destruct (ALL_DISTINCT conN (fun x y : conN => (x =? y)%string) (map (fun '(x, _, _) => x) f)) eqn:?; try easy.
 				inversion H1; subst.
 				apply e_step_Letrec.
 				apply eq_distinct_list; easy.
@@ -86,7 +86,7 @@ Proof.
 				-- destruct u,ps eqn:?; try easy.
 					++ inversion H1; subst. constructor.
 					++ destruct p eqn:?.
-						destruct (ALL_DISTINCT conN (fun x y : conN => negb (x =? y)%string) (pat_bindings p1 [])) eqn:?.
+						destruct (ALL_DISTINCT conN (fun x y : conN => (x =? y)%string) (pat_bindings p1 [])) eqn:?.
 						destruct (pmatch (namespace.c val s0) p1 v []) eqn:?; subst; try easy.
 						** inversion H1.
 							apply e_step_Cmat_NM; try easy.

@@ -53,20 +53,6 @@ Definition array_length := Eval cbv in PArray.max_length.
 
 Record good_for_extraction (fl : EWellformed.EEnvFlags) (p : program (list (kername × EAst.global_decl)) EAst.term) :=
 	{
-    few_enough_blocks :
-	forall (i : inductive) (args : list nat), lookup_constructor_args p.1 i = Some args -> blocks_until #|args| args < 200 ;
-    few_enough_constructors :
-    forall (i : inductive) (mb : EAst.mutual_inductive_body)
-		(ob : EAst.one_inductive_body),
-		EGlobalEnv.lookup_inductive p.1 i = Some (mb, ob) ->
-		#|EAst.ind_ctors ob| < Z.to_nat Numbers.Cyclic.Int63.Uint63.wB ;
-    few_enough_arguments_in_constructors :
-    forall (i : inductive) (mb : EAst.mutual_inductive_body)
-		(ob : EAst.one_inductive_body),
-		EGlobalEnv.lookup_inductive p.1 i = Some (mb, ob) ->
-								(forall (n : nat) (b : EAst.constructor_body),
-									nth_error (EAst.ind_ctors ob) n = Some b ->
-									EAst.cstr_nargs b < int_to_nat array_length) ;
     right_flags_in_glob : @EWellformed.wf_glob fl p.1 ;
     right_flags_in_term : @EWellformed.wellformed fl p.1 0 p.2
 	}.
@@ -164,8 +150,8 @@ Definition extraction_term_flags_mlf :=
     EWellformed.has_tFix := true;
     EWellformed.has_tCoFix := false;
     EWellformed.has_tPrim :=
-      {| EWellformed.has_primint := true;
-         EWellformed.has_primfloat := true;
+      {| EWellformed.has_primint := false;
+         EWellformed.has_primfloat := false;
          EWellformed.has_primstring := false;
          EWellformed.has_primarray := false |};
     EWellformed.has_tLazy_Force := false
@@ -181,7 +167,81 @@ Definition extraction_env_flags_mlf :=
 Definition named_extraction_env_flags_mlf :=
   switch_env_flags_to_named (EImplementBox.switch_off_box extraction_env_flags_mlf).
 
-Axiom assume_can_be_extracted : forall erased_program, good_for_extraction extraction_env_flags_mlf erased_program.
+Definition erasure_env_flags : EWellformed.EEnvFlags :=
+  EConstructorsAsBlocks.switch_cstr_as_blocks
+    (EInlineProjections.disable_projections_env_flag (ERemoveParams.switch_no_params EWellformed.all_env_flags)).
+
+Fixpoint cakeml_term_ok (t : EAst.term) : bool :=
+  match t with
+  | EAst.tBox | EAst.tRel _ | EAst.tConst _ => true
+  | EAst.tLambda _ b => cakeml_term_ok b
+  | EAst.tLetIn _ b b' => cakeml_term_ok b && cakeml_term_ok b'
+  | EAst.tApp f a => cakeml_term_ok f && cakeml_term_ok a
+  | EAst.tConstruct _ _ args => forallb cakeml_term_ok args
+  | EAst.tCase _ d brs => cakeml_term_ok d && forallb (fun br => cakeml_term_ok br.2) brs
+  | EAst.tFix mfix _ => forallb (fun d => cakeml_term_ok d.(EAst.dbody)) mfix
+  | EAst.tVar _ | EAst.tEvar _ _ | EAst.tProj _ _ | EAst.tCoFix _ _
+  | EAst.tPrim _ | EAst.tLazy _ | EAst.tForce _ => false
+  end.
+
+Fixpoint cakeml_env_ok (Σ : EAst.global_declarations) : bool :=
+  match Σ with
+  | nil => true
+  | (_, EAst.ConstantDecl {| EAst.cst_body := Some b |}) :: Σ => cakeml_term_ok b && cakeml_env_ok Σ
+  | (_, EAst.ConstantDecl {| EAst.cst_body := None |}) :: _ => false
+  | (_, EAst.InductiveDecl _) :: Σ => cakeml_env_ok Σ
+  end.
+
+Definition cakeml_check (p : program EAst.global_declarations EAst.term) : bool :=
+  cakeml_env_ok p.1 && cakeml_term_ok p.2.
+
+Lemma cakeml_env_ok_bodies Σ kn d :
+  cakeml_env_ok Σ -> EGlobalEnv.lookup_constant Σ kn = Some d -> isSome d.(EAst.cst_body).
+Proof.
+  unfold EGlobalEnv.lookup_constant.
+  induction Σ as [|[kn' [[[b|]]|m]] Σ IH]; cbn; try discriminate; intros Hok.
+  all: try (move/andP: Hok => [_ Hok]).
+  all: destruct (eqb_spec kn kn'); [|now apply IH].
+  - now intros [= <-].
+  - discriminate.
+Qed.
+
+Lemma wellformed_restrict Σ k t :
+  (forall kn d, EGlobalEnv.lookup_constant Σ kn = Some d -> isSome d.(EAst.cst_body)) ->
+  @EWellformed.wellformed erasure_env_flags Σ k t -> cakeml_term_ok t ->
+  @EWellformed.wellformed extraction_env_flags_mlf Σ k t.
+Proof.
+  intros Hbodies.
+  induction t in k |- * using EInduction.term_forall_list_ind; cbn; intros Hwf Hok; rtoProp; intuition auto.
+  - destruct EGlobalEnv.lookup_constant as [d|] eqn:Hc; auto. cbn. now apply (Hbodies s d).
+  - solve_all.
+  - solve_all.
+  - unfold EWellformed.wf_fix in *. rtoProp. intuition auto. solve_all; unfold test_def in *; eauto.
+Qed.
+
+Lemma wf_glob_restrict Σ :
+  @EWellformed.wf_glob erasure_env_flags Σ -> cakeml_env_ok Σ ->
+  @EWellformed.wf_glob extraction_env_flags_mlf Σ.
+Proof.
+  induction 1 as [|kn d Σ Hwf IH Hd Hfr]; [constructor|].
+  destruct d as [[[b|]]|m]; cbn; [|discriminate|].
+  - move/andP => [Hb Hok]. constructor; auto. cbn in *.
+    apply wellformed_restrict; auto. intros. eapply cakeml_env_ok_bodies; eauto.
+  - intros Hok. constructor; auto.
+Qed.
+
+Lemma cakeml_check_spec p :
+  @EProgram.wf_eprogram erasure_env_flags p -> cakeml_check p -> good_for_extraction extraction_env_flags_mlf p.
+Proof.
+  intros [Hg Ht]. unfold cakeml_check. move/andP => [He Hte]. split.
+  - now apply wf_glob_restrict.
+  - apply wellformed_restrict; auto. intros. eapply cakeml_env_ok_bodies; eauto.
+Qed.
+
+Definition unsupported_program : program EAst.global_declarations EAst.term := ([], EAst.tBox).
+
+Definition unsupported_msg : string :=
+  "The erased program is not supported by the CakeML backend (it uses axioms, primitive types, cofixpoints, or lazy evaluation)".
 
 Program Definition enforce_extraction_conditions :
   t EAst.global_declarations EAst.global_declarations EAst.term EAst.term EAst.term
@@ -190,17 +250,22 @@ Program Definition enforce_extraction_conditions :
   {|
     name := "Enforce the term is extractable" ;
     transform p _ :=
-      let r := check_good_for_extraction extraction_env_flags_mlf p in
-      ignore r p ;(*  if check_good_for_extraction extraction_env_flags_mlf p then p else p ;  *)
-    pre p := True ;
+      if cakeml_check p >>> unsupported_msg
+      then p else unsupported_program ;
+    pre p := @EProgram.wf_eprogram erasure_env_flags p ;
     post p := good_for_extraction extraction_env_flags_mlf p ;
-    obseq p1 _ p2 v1 v2 := p1 = p2 /\ v1 = v2
+    obseq p1 _ p2 v1 v2 := cakeml_check p1 -> p2 = p1 /\ v2 = v1
   |}.
 Next Obligation.
-  program_simpl. apply assume_can_be_extracted.
+  program_simpl. destruct (cakeml_check _) eqn:Hg; cbn.
+  - now apply cakeml_check_spec.
+  - split; cbn; [constructor|reflexivity].
 Qed.
 Next Obligation.
-  program_simpl. red. program_simpl.  exists v. auto.
+  program_simpl. red. program_simpl.
+  destruct (cakeml_check _) eqn:Hg; cbn.
+  - exists v. auto.
+  - exists EAst.tBox. split; [|discriminate]. sq. now eapply EWcbvEval.eval_atom.
 Qed.
 
 From MetaRocq.Erasure Require Import EImplementBox EWellformed EProgram.
@@ -213,12 +278,6 @@ Proof.
   intros input p.
   destruct input as [Σ t].
   split.
-  + intros.
-    unfold lookup_constructor_args in H.
-    rewrite lookup_inductive_implement_box in H. now eapply few_enough_blocks.
-  + intros.
-    rewrite lookup_inductive_implement_box in H. now eapply few_enough_constructors.
-  + intros. rewrite lookup_inductive_implement_box in H. now eapply few_enough_arguments_in_constructors.
   + cbn. refine ( @implement_box_env_wf_glob _ Σ _ _ _). reflexivity. reflexivity. apply p.
   + apply transform_wellformed'. all: try reflexivity. apply p. apply p.
 Qed.
@@ -309,19 +368,6 @@ Proof.
   intros input H H0.
   destruct input as [Σ s].
   split.
-  + intros. eapply few_enough_blocks. eassumption.
-    unfold lookup_constructor_args in *.
-    instantiate (1 := i).
-    erewrite <- lookup_inductive_annotate_env.
-    eassumption.
-  + intros. eapply few_enough_constructors. eassumption.
-    unfold lookup_constructor_args in *.
-    instantiate (1 := mb). instantiate (1 := i).
-    erewrite <- lookup_inductive_annotate_env.
-    eassumption.
-  + intros.
-    rewrite lookup_inductive_annotate_env in H1.
-    eapply few_enough_arguments_in_constructors; eauto.
   + cbn. destruct H0.
     clear H1. cbn in *. clear H. induction Σ; cbn.
   - econstructor.
@@ -419,7 +465,8 @@ Program Definition compile_to_malfunction :
 		obseq p _ p' v v' := True
 	|}.
 Next Obligation.
-Admitted.
+	red. intros. exists (Litv (StrLit (Strings.String.EmptyString))). split; exact I.
+Qed.
 
 Program Definition post_verified_named_erasure_pipeline :
 	Transform.t EAst.global_declarations _ _ _ _ EWcbvEvalNamed.value
@@ -490,6 +537,12 @@ Program Definition malfunction_pipeline
 Next Obligation.
 	unfold switchable_erasure_pipeline.
 	destruct enable_typed_erasure => //.
+Qed.
+Next Obligation.
+	unfold switchable_erasure_pipeline in H.
+	destruct enable_typed_erasure; cbn in H;
+	  unfold optional_unsafe_transforms in H;
+	  destruct (enable_unsafe config) as [[] [] [] [] []]; cbn in * => //; intuition auto.
 Qed.
 
 Fixpoint extract_names (t : Ast.term) : list ident :=

@@ -4,7 +4,7 @@ From Equations Require Import Equations.
 Import Logic.
 
 From MetaRocq.PCUIC Require Import PCUICAstUtils.
-From MetaRocq.Utils Require Import MRList bytestring.
+From MetaRocq.Utils Require Import MRList bytestring MRString.
 From MetaRocq.Erasure Require Import EAst ESpineView EEtaExpanded EInduction ERemoveParams Erasure EGlobalEnv.
 
 From CakeML Require Import ast namespace semanticPrimitives functions bigstep.
@@ -60,11 +60,42 @@ Definition lookup_record_projs (e : global_declarations) (ind : Kernames.inducti
     | None => None
     end.
 
-Definition lookup_constructor_names (e : global_declarations) (ind : Kernames.inductive) : option (list Kernames.ident) :=
+Definition local_name (na : Kernames.ident) : String.string :=
+  String.to_string ("v" ++ na).
+
+Fixpoint global_index (Σ : global_declarations) (kn : Kernames.kername) : nat :=
+  match Σ with
+  | [] => 0
+  | (kn', _) :: Σ' => if Kernames.eq_kername kn kn' then List.length Σ' else global_index Σ' kn
+  end.
+
+Definition global_ident_at (i : nat) (kn : Kernames.kername) : Kernames.ident :=
+  "g" ++ MRString.string_of_nat i ++ "_" ++ Kernames.string_of_kername kn.
+
+Definition global_ident (Σ : global_declarations) (kn : Kernames.kername) : Kernames.ident :=
+  global_ident_at (global_index Σ kn) kn.
+
+Definition global_name (Σ : global_declarations) (kn : Kernames.kername) : String.string :=
+  String.to_string (global_ident Σ kn).
+
+Definition ctor_ident (c : nat) (cdecl : constructor_body) : Kernames.ident :=
+  "C" ++ MRString.string_of_nat c ++ "_" ++ MRString.string_of_nat cdecl.(cstr_nargs) ++ "_" ++ cdecl.(cstr_name).
+
+Definition ctor_name (c : nat) (cdecl : constructor_body) : String.string :=
+  String.to_string (ctor_ident c cdecl).
+
+Definition lookup_constructor_names (e : global_declarations) (ind : Kernames.inductive) : option (list (String.string * nat)) :=
   match lookup_inductive e ind with
-  | Some (mdecl, idecl) => Some (map cstr_name idecl.(ind_ctors))
+  | Some (mdecl, idecl) => Some (mapi (fun c cdecl => (ctor_name c cdecl, cdecl.(cstr_nargs))) idecl.(ind_ctors))
   | None => None
   end.
+
+Definition case_pattern (name : String.string) (nargs : nat) (binders : list BasicAst.name) : pat :=
+  let xs := map (fun x => local_name (BasicAst.string_of_name x)) binders in
+  if andb (Nat.eqb (List.length xs) nargs) (ALL_DISTINCT _ Strings.String.eqb xs) then
+    Pcon (Some (Short name)) (List.rev (map Pvar xs))
+  else
+    Pcon (Some (Short name)) (repeat Pany nargs).
 
  Definition lookup_constructor_args (e : global_declarations) (ind : Kernames.inductive) : option (list nat) :=
   match lookup_inductive e ind with
@@ -84,29 +115,29 @@ Notation Error s := (Raise (Lit( StrLit s))).
 
 Equations? compile (t: term) : exp
 	by wf t (fun x y : EAst.term => size x < size y) :=
-	| tVar na => Var (Short (String.to_string na))
-	| tLambda nm bod => Fun (String.to_string (BasicAst.string_of_name nm)) (compile bod)
+	| tVar na => Var (Short (local_name na))
+	| tLambda nm bod => Fun (local_name (BasicAst.string_of_name nm)) (compile bod)
 	| tLetIn nm dfn bod =>
-		Let (Some (String.to_string (BasicAst.string_of_name nm ))) (compile dfn) (compile bod)
+		Let (Some (local_name (BasicAst.string_of_name nm))) (compile dfn) (compile bod)
 	| tApp fn arg =>
 		App Opapp [compile fn;compile arg]
-	| tConst nm => Var (Short (String.to_string (Kernames.string_of_kername nm)))
+	| tConst nm => Var (Short (global_name Σ nm))
 	| tConstruct i m args =>
 		match lookup_constructor_names Σ i with
-		| Some names_args => Con (Some (Short (String.to_string (nth m names_args "")))) (map_InP args (fun x (H : In x args) => compile x))
+		| Some names_args => Con (Some (Short (fst (nth m names_args (String.to_string "", 0))))) (map_InP args (fun x (H : In x args) => compile x))
 		| None => Error "error: inductive not found"
 		end
 	| tCase i mch brs =>
 		match lookup_constructor_names Σ (fst i) with
 		| Some names_args =>
-			Mat (compile mch) (map2_InP names_args brs (fun name '(binders, body) _ _ => (Pcon (Some (Short (String.to_string name))) (rev (map (fun x => Pvar (String.to_string (BasicAst.string_of_name x))) binders)), compile body)))
+			Mat (compile mch) (map2_InP names_args brs (fun '(name, nargs) '(binders, body) _ _ => (case_pattern name nargs binders, compile body)))
 		| None => Error "error: inductive not found"
 		end
 	| tFix mfix idx =>
 		let bodies :=
 			map_InP mfix (fun d H =>
 				let '(arg,expr) := force_lambda (compile d.(dbody)) in
-					(String.to_string (BasicAst.string_of_name (d.(dname))), arg , expr)) in
+					(local_name (BasicAst.string_of_name (d.(dname))), arg , expr)) in
 			Letrec bodies (Var ( Short(fst (fst (nth idx bodies (String.to_string "", String.to_string "", Lit (StrLit "")))))))
 
 
@@ -150,7 +181,7 @@ Fixpoint compile_env Σ : list (string * option exp) :=
 	match Σ with
 	| [] => []
 	| (x,d) :: Σ => match d with
-					ConstantDecl cb => (Kernames.string_of_kername x, compile_constant_decl Σ cb) :: compile_env Σ
+					ConstantDecl cb => (global_ident_at (List.length Σ) x, compile_constant_decl Σ cb) :: compile_env Σ
 				| _ => compile_env Σ
 				end
 	end.

@@ -31,7 +31,7 @@ Inductive ALL_DISTINCT_rel a : list a -> Prop :=
 Fixpoint NOT_MEM a eq (e:a) (l:list a):bool:=
 	match l with
 	| [] => true
-	| h::q => andb (eq h e) (NOT_MEM a eq e q)
+	| h::q => andb (negb (eq h e)) (NOT_MEM a eq e q)
 	end.
 
 Fixpoint ALL_DISTINCT a (eq:a->a->bool) (l:list a):bool :=

@@ -59,7 +59,7 @@ Definition continue (va:val) (cs:list ctxt):e_step_result:=
 	| (Cmat tt [] err_v,env)::c0 =>
 		Estep (env, Exn err_v,c0)
 	| (Cmat tt ((p,e)::pes) err_v,env)::c0 =>
-		if ALL_DISTINCT conN (fun x y => negb (x=?y)%string) (pat_bindings p []) then
+		if ALL_DISTINCT conN (fun x y => (x=?y)%string) (pat_bindings p []) then
 			match pmatch env.(c val) p va [] with
 			|Match_type_error _ => Eabort
 			|No_match _ => Estep (env, Val va, (Cmat tt pes err_v,env)::c0)
@@ -122,7 +122,7 @@ Definition e_step (s1 :small_state):e_step_result:=
                 Eabort
 			| Mat e pes => push env e (Cmat_check tt pes bind_exn_v) c0
 			| Letrec funs e =>
-				if ALL_DISTINCT varN (fun x y => negb (x=?y)%string) (map (fun '(x,_,_)=>x) funs) then
+				if ALL_DISTINCT varN (fun x y => (x=?y)%string) (map (fun '(x,_,_)=>x) funs) then
 					Estep ({| v:= (build_rec_env funs env env.(v val)) ; c:= env.(c val) |},Exp e, c0)
 				else
 					Eabort
