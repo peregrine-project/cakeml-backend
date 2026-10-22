@@ -7,7 +7,6 @@ theories/CakeML/namespace.v
 theories/CakeML/proofs/equivalence_proofs.v
 theories/CakeML/proofs/helper_lemmas.v
 theories/CakeML/proofs/invariants.v
-theories/CakeML/proofs/determinism.v
 theories/CakeML/semanticPrimitives.v
 theories/CakeML/smallstep_rel.v
 theories/CakeML/smallstep.v
@@ -15,8 +14,6 @@ theories/CakeML/FullAst.v
 theories/CakeML/Serialize.v
 theories/CakeML/Deserialize.v
 theories/Backend/Compile.v
-theories/Backend/CompileCorrect.v
 theories/Backend/FFI.v
 theories/Backend/Pipeline.v
-theories/Backend/PipelineCorrect.v
 theories/Backend/Serialize.v

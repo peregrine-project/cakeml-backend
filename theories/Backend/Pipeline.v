@@ -480,7 +480,7 @@ Program Definition verified_named_erasure_pipeline :
 	Transform.t global_env_ext_map _ _ _ _ EWcbvEvalNamed.value
 				PCUICTransform.eval_pcuic_program
 				(fun p v => ∥ EWcbvEvalNamed.eval p.1 [] p.2 v ∥) :=
-	verified_erasure_pipeline ▷
+	verified_erasure_pipeline default_erasure_config ▷
 	post_verified_named_erasure_pipeline.
 
 Program Definition verified_malfunction_pipeline :
@@ -503,27 +503,44 @@ Section compile_malfunction_pipeline.
 
 	Variable Normalisation : forall Σ0 : global_env_ext, wf_ext Σ0 -> NormalizationIn Σ0.
 
-	Definition compile_malfunction_pipeline := transform verified_malfunction_pipeline (Σ, t) (precond _ _ _ _ expΣ expt typing _).
+	Definition compile_malfunction_pipeline := transform verified_malfunction_pipeline (Σ, t) (precond _ _ _ _ expΣ expt typing _ default_erasure_config).
 
 End compile_malfunction_pipeline.
 
 Arguments compile_malfunction_pipeline {_ _ _ _} _ _ _ {_}.
 
-Program Definition verified_typed_erasure_pipeline_unsafe econf :=
-	verified_typed_erasure_pipeline econf ▷ (optional_unsafe_transforms econf).
-Next Obligation.
-  unfold optional_unsafe_transforms, optional_self_transform in H |- *.
-  destruct enable_unsafe as [[] [] [] [] []] => //.
-Qed.
-
 (* This also optionally runs typed erasure and/or the cofix to fix translation *)
 Program Definition switchable_erasure_pipeline econf :=
-	if econf.(enable_typed_erasure) then verified_typed_erasure_pipeline_unsafe econf
-	else verified_erasure_pipeline_mapping ▷ (optional_unsafe_transforms econf).
+	if econf.(enable_typed_erasure) then verified_typed_erasure_pipeline econf ▷ (optional_unsafe_transforms econf)
+	else verified_erasure_pipeline_mapping econf ▷ (optional_unsafe_transforms econf).
 Next Obligation.
 Proof.
-	unfold optional_unsafe_transforms, optional_self_transform.
-	destruct enable_unsafe as [[] ? ? ? ?] => //.
+	unfold optional_unsafe_transforms; cbn.
+	destruct econf as [[[] ? ? ?] ? ? [] ?]=> //.
+Qed.
+Next Obligation.
+Proof.
+	unfold optional_unsafe_transforms; cbn.
+	destruct econf as [[[] ? ? ?] ? ? [] ?]=> //.
+Qed.
+
+Lemma wellformed_coind_to_ind efl Σ k t :
+	@EWellformed.wellformed (efl_coind_to_ind efl) Σ k t -> @EWellformed.wellformed efl Σ k t.
+Proof.
+	induction t in k |- * using EInduction.term_forall_list_ind; cbn; intros Hwf; rtoProp; intuition auto; solve_all.
+	- destruct cstr_as_blocks => //.
+		destruct EGlobalEnv.lookup_constructor_pars_args as [[]|]; rtoProp; intuition auto; solve_all.
+	- unfold EWellformed.wf_fix in *. rtoProp. intuition auto. solve_all; unfold test_def in *; eauto.
+	- destruct p as [? []]; cbn in *; rtoProp; intuition auto; depelim X; intuition auto.
+		unfold EPrimitive.test_array_model in *; rtoProp; intuition auto; solve_all.
+Qed.
+
+Lemma wf_eprogram_coind_to_ind efl p :
+	@EProgram.wf_eprogram (efl_coind_to_ind efl) p -> @EProgram.wf_eprogram efl p.
+Proof.
+	destruct p as [Σ t]; intros [Hg Ht]; split; cbn in *; [|now apply wellformed_coind_to_ind].
+	clear Ht; induction Hg as [|kn d Σ Hwf IH Hd Hfr]; constructor; auto.
+	destruct d as [[[b|]]|m]; cbn in *; auto using wellformed_coind_to_ind.
 Qed.
 
 Program Definition malfunction_pipeline
@@ -539,10 +556,9 @@ Next Obligation.
 	destruct enable_typed_erasure => //.
 Qed.
 Next Obligation.
-	unfold switchable_erasure_pipeline in H.
-	destruct enable_typed_erasure; cbn in H;
-	  unfold optional_unsafe_transforms in H;
-	  destruct (enable_unsafe config) as [[] [] [] [] []]; cbn in * => //; intuition auto.
+	unfold switchable_erasure_pipeline, optional_unsafe_transforms in H.
+	destruct config as [[[[] ? ? []] [] ? ? ? ?] ?]; cbn in * => //; intuition auto.
+	all: now apply wf_eprogram_coind_to_ind.
 Qed.
 
 Fixpoint extract_names (t : Ast.term) : list ident :=
