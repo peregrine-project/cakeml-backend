@@ -524,6 +524,25 @@ Proof.
 	destruct econf as [[[] ? ? ?] ? ? [] ?]=> //.
 Qed.
 
+Lemma wellformed_coind_to_ind efl Σ k t :
+	@EWellformed.wellformed (efl_coind_to_ind efl) Σ k t -> @EWellformed.wellformed efl Σ k t.
+Proof.
+	induction t in k |- * using EInduction.term_forall_list_ind; cbn; intros Hwf; rtoProp; intuition auto; solve_all.
+	- destruct cstr_as_blocks => //.
+		destruct EGlobalEnv.lookup_constructor_pars_args as [[]|]; rtoProp; intuition auto; solve_all.
+	- unfold EWellformed.wf_fix in *. rtoProp. intuition auto. solve_all; unfold test_def in *; eauto.
+	- destruct p as [? []]; cbn in *; rtoProp; intuition auto; depelim X; intuition auto.
+		unfold EPrimitive.test_array_model in *; rtoProp; intuition auto; solve_all.
+Qed.
+
+Lemma wf_eprogram_coind_to_ind efl p :
+	@EProgram.wf_eprogram (efl_coind_to_ind efl) p -> @EProgram.wf_eprogram efl p.
+Proof.
+	destruct p as [Σ t]; intros [Hg Ht]; split; cbn in *; [|now apply wellformed_coind_to_ind].
+	clear Ht; induction Hg as [|kn d Σ Hwf IH Hd Hfr]; constructor; auto.
+	destruct d as [[[b|]]|m]; cbn in *; auto using wellformed_coind_to_ind.
+Qed.
+
 Program Definition malfunction_pipeline
 	(config : malfunction_pipeline_config) :
 	Transform.t _ _ _ _ _ _ eval_template_program_mapping
@@ -537,10 +556,9 @@ Next Obligation.
 	destruct enable_typed_erasure => //.
 Qed.
 Next Obligation.
-	unfold switchable_erasure_pipeline in H.
-	destruct enable_typed_erasure; cbn in H;
-	  unfold optional_unsafe_transforms in H;
-	  destruct (enable_unsafe config) as [[] [] [] [] []]; cbn in * => //; intuition auto.
+	unfold switchable_erasure_pipeline, optional_unsafe_transforms in H.
+	destruct config as [[[[] ? ? []] [] ? ? ? ?] ?]; cbn in * => //; intuition auto.
+	all: now apply wf_eprogram_coind_to_ind.
 Qed.
 
 Fixpoint extract_names (t : Ast.term) : list ident :=
