@@ -116,12 +116,18 @@ Definition global_serializer : Serialize (bytestring.string * option exp) :=
 		]
 	end.
 
+(** A datatype declaration.  cake runs with type inference skipped, so the argument
+    types are not checked: the type itself is the placeholder for each of them. *)
+Definition dtype_sexp (block : list (bytestring.string * list (bytestring.string * nat))) : sexp :=
+	let str (s : bytestring.string) : sexp := to_sexp (String.to_string s) in
+	let one '(ty, ctors) :=
+		let arg : sexp := [ Atom "Atapp"; List nil; [ Atom "Short"; str ty ] ] in
+		let ctor '(c, n) := List (str c :: List.repeat arg n) in
+		List (List nil :: str ty :: List.map ctor ctors) in
+	[ Atom "Dtype"; [Atom "unk"; Atom "unk"]; List (List.map one block) ].
+
 Definition Serialize_module (names : list bytestring.string) :=
-  fun '(m, x) =>
-    let name : bs := match m with
-							| (x :: l)%list => fst x
-							| nil => ""%bs
-						end in
+  fun '(tys, m, x) =>
     let main := "main"%bs in
 		let defs := List.rev ((main, Some x) :: m)%list in
-		 @Serialize_list _ global_serializer defs.
+		List (List.map dtype_sexp (List.rev tys) ++ List.map global_serializer defs).
