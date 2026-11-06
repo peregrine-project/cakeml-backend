@@ -5,6 +5,7 @@ Import Logic.
 
 From MetaRocq.PCUIC Require Import PCUICAstUtils.
 From MetaRocq.Utils Require Import MRList bytestring.
+From MetaRocq.Utils Require MRString.
 From MetaRocq.Erasure Require Import EAst ESpineView EEtaExpanded EInduction ERemoveParams Erasure EGlobalEnv.
 
 From CakeML Require Import ast namespace semanticPrimitives functions bigstep.
@@ -60,9 +61,19 @@ Definition lookup_record_projs (e : global_declarations) (ind : Kernames.inducti
     | None => None
     end.
 
+(** The CakeML name of an inductive: unique in the program, as CakeML resolves
+    types and constructors by name and a later declaration shadows an earlier one. *)
+Definition type_ident (ind : Kernames.inductive) (name : Kernames.ident) : bytestring.string :=
+  Kernames.string_of_kername ind.(Kernames.inductive_mind) ++ "." ++ MRString.string_of_nat ind.(Kernames.inductive_ind) ++ "." ++ name.
+
+(** The CakeML name of constructor [c] of an inductive. *)
+Definition ctor_ident (ind : Kernames.inductive) (c : nat) (name : Kernames.ident) : bytestring.string :=
+  Kernames.string_of_kername ind.(Kernames.inductive_mind) ++ "." ++ MRString.string_of_nat ind.(Kernames.inductive_ind)
+    ++ "." ++ MRString.string_of_nat c ++ "." ++ name.
+
 Definition lookup_constructor_names (e : global_declarations) (ind : Kernames.inductive) : option (list Kernames.ident) :=
   match lookup_inductive e ind with
-  | Some (mdecl, idecl) => Some (map cstr_name idecl.(ind_ctors))
+  | Some (mdecl, idecl) => Some (mapi (fun c cb => ctor_ident ind c cb.(cstr_name)) idecl.(ind_ctors))
   | None => None
   end.
 
@@ -155,5 +166,25 @@ Fixpoint compile_env Σ : list (string * option exp) :=
 				end
 	end.
 
+(** One type declaration per body of an inductive declaration: the type name and
+    its constructors with their numbers of arguments. *)
+Definition compile_mib (kn : Kernames.kername) (mib : mutual_inductive_body)
+  : list (bytestring.string * list (bytestring.string * nat)) :=
+  mapi (fun i oib =>
+          let ind := {| Kernames.inductive_mind := kn; Kernames.inductive_ind := i |} in
+          (type_ident ind oib.(ind_name),
+           mapi (fun c cb => (ctor_ident ind c cb.(cstr_name), cb.(cstr_nargs))) oib.(ind_ctors)))
+       mib.(ind_bodies).
+
+(** The datatype declarations of a program, one entry per mutual block.  The
+    constructors of an undeclared type get wrong tags. *)
+Fixpoint compile_dtypes (Σ : global_declarations)
+  : list (list (bytestring.string * list (bytestring.string * nat))) :=
+	match Σ with
+	| [] => []
+	| (x, InductiveDecl mib) :: Σ => compile_mib x mib :: compile_dtypes Σ
+	| _ :: Σ => compile_dtypes Σ
+	end.
+
 Definition compile_program (p : EProgram.eprogram) :=
-	(compile_env (fst p), compile (fst p) (snd p)).
+	(compile_dtypes (fst p), compile_env (fst p), compile (fst p) (snd p)).
