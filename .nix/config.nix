@@ -8,19 +8,8 @@
 
   no-rocq-yet = true;
 
-  default-bundle = "9.0";
+  default-bundle = "9.1";
 
-  bundles."9.0" = {
-    coqPackages = {
-      coq.override.version = "9.0";
-      metarocq-utils.override.version = "1.4-9.0.1";
-      metarocq-erasure-plugin.override.version = "1.4-9.0.1";
-      ceres-bs.override.version = "1.0.0";
-    }; rocqPackages = {
-      rocq-core.override.version = "9.0";
-    };
-    push-branches = [ "main" "rocq-9.1" ];
-  };
   bundles."9.1" = {
     coqPackages = {
       coq.override.version = "9.1";
