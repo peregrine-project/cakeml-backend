@@ -15,7 +15,7 @@ bug-reports: "https://github.com/peregrine-project/cakeml-backend/issues"
 depends: [
   "rocq-core" {= "9.1.1"}
   "rocq-stdlib" {= "9.0.0"}
-  "rocq-metarocq-erasure-plugin" {= "1.5.1+9.1"}
+  "rocq-metarocq-erasure-plugin" {= "1.5.1+9.1+dev"}
   "rocq-ceres-bytestring" {= "1.0.0"}
 ]
 
@@ -25,4 +25,18 @@ install: [ make "install" ]
 tags: [
   "keyword:extraction"
   "logpath:CakeML"
+]
+
+# The snapshot line builds against the MetaRocq 9.1 snapshot that Peregrine pins
+# (rocq-peregrine.opam); MetaRocq 1.5.1 has the older verified_erasure_pipeline.
+pin-depends: [
+  ["rocq-metarocq-utils.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-common.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-template.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-pcuic.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-template-pcuic.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-safechecker.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-erasure.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-safechecker-plugin.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
+  ["rocq-metarocq-erasure-plugin.1.5.1+9.1+dev" "git+https://github.com/MetaRocq/metarocq.git#51b14e4bb5f4580f00f60208ff8dbf31f3ad6f56"]
 ]
