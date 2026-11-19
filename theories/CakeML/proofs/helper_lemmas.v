@@ -39,7 +39,7 @@ Proof.
 	easy.
 Qed.
 
-Lemma eq_not_mem : forall a l, NOT_MEM conN (fun x0 y : conN => negb (x0 =? y)%string) a l = true <-> ~ In a l.
+Lemma eq_not_mem : forall a l, NOT_MEM conN (fun x0 y : conN => (x0 =? y)%string) a l = true <-> ~ In a l.
 Proof.
 	intros.
 	split; intro.
@@ -68,7 +68,7 @@ Proof.
 		destruct H; easy.
 Qed.
 
-Lemma eq_distinct_list : forall l, ALL_DISTINCT conN (fun x0 y : conN => negb (x0 =? y)%string) l = true <-> NoDup l.
+Lemma eq_distinct_list : forall l, ALL_DISTINCT conN (fun x0 y : conN => (x0 =? y)%string) l = true <-> NoDup l.
 Proof.
 	intros.
 	split; intro.
