@@ -93,6 +93,26 @@ Definition force_lambda (e : exp) :=
 
 Notation Error s := (Raise (Lit( StrLit s))).
 
+Lemma map_InP_ext {A B} (l : list A) (f g : forall x : A, In x l -> B) :
+	(forall x H, f x H = g x H) -> map_InP l f = map_InP l g.
+Proof.
+	induction l as [|a l IH] in f, g |- *; intros H; [reflexivity|].
+	cbn. f_equal; [apply H|]. apply IH. intros; apply H.
+Qed.
+
+Lemma map2_InP_ext {A1 A2 B} (l1 : list A1) (l2 : list A2) (f g : forall x1 x2, In x1 l1 -> In x2 l2 -> B) :
+	(forall x1 x2 H1 H2, f x1 x2 H1 H2 = g x1 x2 H1 H2) -> map2_InP l1 l2 f = map2_InP l1 l2 g.
+Proof.
+	induction l1 as [|a l1 IH] in l2, f, g |- *; intros H; destruct l2; simp map2_InP; try reflexivity.
+	f_equal; [apply H|]. apply IH. intros; apply H.
+Qed.
+
+(* The unfolding equations of [compile] are proved below without functional
+   extensionality (see the obligation after the definition), so that the
+   correctness proof (CompileCorrect.v) does not depend on that axiom.
+   This changes no definition: the extracted compiler is the same. *)
+#[local] Unset Equations With Funext.
+
 Equations? compile (t: term) : exp
 	by wf t (fun x y : EAst.term => size x < size y) :=
 	| tVar na => Var (Short (String.to_string na))
@@ -151,6 +171,28 @@ Equations? compile (t: term) : exp
 			eapply (In_size snd size i1).
 		- simpl. apply Nat.lt_lt_succ_r. eapply (In_size (fun x => dbody x) size H).
 	Qed.
+
+	(* The unfolding lemma, which Equations proves with functional extensionality
+	   when [Equations With Funext] is set. *)
+	Next Obligation.
+		intros t. unfold compile. rewrite Subterm.FixWf_unfold.
+		{ destruct t; try reflexivity.
+			- destruct p; reflexivity.
+			- destruct prim as [? []]; reflexivity. }
+		red. intros x f g H. destruct x; cbn; try reflexivity.
+		all: first
+			[ now rewrite !H
+			| destruct p; reflexivity
+			| destruct prim as [? []]; reflexivity
+			| destruct lookup_constructor_names; [|reflexivity];
+				f_equal; apply map_InP_ext; intros; apply H
+			| destruct lookup_constructor_names; [|reflexivity];
+				rewrite H; f_equal; apply map2_InP_ext; intros ? [] ? ?; now rewrite H
+			| match goal with |- Letrec (map_InP ?l ?F) _ = Letrec (map_InP ?l ?G) _ =>
+					replace (map_InP l F) with (map_InP l G); [reflexivity|]
+				end;
+				apply map_InP_ext; intros; now rewrite H ].
+	Defined.
 
 End Compile.
 
