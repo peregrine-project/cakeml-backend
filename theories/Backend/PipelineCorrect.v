@@ -136,6 +136,25 @@ Proof.
   unfold compile_program; cbn [fst snd]. rewrite <- (vrel_fo Σ n0 _ _ _ Hfo Hr). exact Hw.
 Qed.
 
+(** The same statement for an arbitrary result value, related by [vrel]. *)
+Lemma cakeml_correct_named_vrel (N : EProgram.eprogram) v n0 env0 genv :
+  good_for_extraction named_extraction_env_flags_mlf N ->
+  names_ok N = true ->
+  ∥ EWcbvEvalNamed.eval N.1 [] N.2 v ∥ ->
+  eval_program_decls n0 env0 (compile_program N).1 genv ->
+  exists w, evaluate genv (compile_program N).2 (Rval w) /\
+    vrel N.1 (namespace.c _ genv) (type_stamp n0 N.1) v w.
+Proof.
+  intros [Hwfg Hwft] Hnm [Hev] Hd.
+  assert (Hprim : forall p : EPrimitive.prim_val EAst.term,
+    @EWellformed.has_prim (@EWellformed.has_tPrim (@EWellformed.term_switches named_extraction_env_flags_mlf)) p = false).
+  { intros [tag m]. now destruct tag. }
+  assert (Hnp : forall kn mdecl, EGlobalEnv.lookup_env N.1 kn = Some (EAst.InductiveDecl mdecl) -> EAst.ind_npars mdecl = 0).
+  { intros kn mdecl. now apply (wf_glob_npars (efl := named_extraction_env_flags_mlf)). }
+  destruct N as [Σ t].
+  exact (@compile_program_correct named_extraction_env_flags_mlf eq_refl eq_refl Hprim eq_refl Σ Hnp n0 env0 t _ genv Hwfg Hwft Hnm Hev Hd).
+Qed.
+
 Definition compile_named_value (Σ : global_env_ext_map) p :=
   eval_fo (compile_value_box (PCUICExpandLets.trans_global_env Σ) p []).
 
