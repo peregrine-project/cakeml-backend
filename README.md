@@ -27,5 +27,7 @@ The other files in `theories` are similar to `rocq-verified-extraction`:
 
 - `FFI.v` is an administrative file
 - `Compile.v` has the compilation function
+- `CompileCorrect.v` proves the compilation function correct
 - `Pipeline.v` has the MetaRocq pipeline instantiated
+- `PipelineCorrect.v` has the end-to-end correctness theorem `verified_cakeml_pipeline_theorem`
 - `Serialize.v` has a printer to s-expressions
